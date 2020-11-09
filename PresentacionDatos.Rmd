@@ -1,0 +1,193 @@
+---
+title: ""
+author: "Fmoreta"
+date: "9/11/2020"
+output: html_document
+---
+
+
+<center><font size="25" color='#1EC2DE'> Análisis exploratorio de datos EDA con R </center></font>
+
+<hr>
+
+<p  align="center"><font size="5"> Luis Moreta</p></font>
+<p  align="center"><font size="4" color = 'grey'> Fecha: 9 de septiembre de 2020</p></font>
+</head>
+
+<body>
+
+<center><font size="20" color='#1EC2DE'>Descripción de los datos </center></font>
+
+### Descripción de la base de datos
+
+
+Inside Airbnb es un conjunto de herramientas y datos independientes y no comerciales que le permite explorar cómo se usa realmente Airbnb en ciudades de todo el mundo.
+La base de dato se obtiene específicamente de la ciudad de Amsterdam y contiene los Review de los diferentes hospedajes ofertados a través de la empresa, así como la descripción de cada hospedaje.
+Al analizar la información disponible públicamente sobre los listados de Airbnb de una ciudad, Inside Airbnb proporciona filtros y métricas clave para que pueda ver cómo se está utilizando Airbnb para competir con el mercado de la vivienda residencial.
+
+Los datos fueron obtenidos de la siguiente dirección <https://public.opendatasoft.com/explore/dataset/airbnb-listings/information>
+
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE, fig.height=2.0, fig.width=6.0}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plotly)
+library(DataExplorer)
+library(tidyverse)
+library(csvy)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+library(tidyverse)
+library(dplyr)
+library(openxlsx) # Importar y exportar a excel
+library(tidyverse) # Manipulación de datos
+library(magrittr) # Pipe %>%, %$%
+library(ggplot2) # Gráficos estáticos
+library(lubridate) # Manipulación de fechas
+library(scales) # Escalas en los gráficos
+library(cowplot) # Combinar graficos
+
+setwd("d:/Users_info/moretaf/My Documents/EDA_R_CURSO/ProyectoFinal")
+load("EV.Rdata")
+```
+
+### El problema y objetivo
+
+Se desea entender cuales son las determinantes del precio y si estas están relacionados con la puntuación que dan los huéspedes, de igual forma se quiere investigar cuales son las características más comunes en las diferentes locaciones de hospedaje.
+
+
+### 1. Relación entre la calificación del hospedaje y el precio
+
+Se realiza un primer vistazo de las variables por separado.
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+g1 <- ggplot(listing, aes(x = Review.Scores.Rating)) + 
+  geom_histogram( aes(y = stat(count) / sum(count))) +
+  labs(title= 'Histograma de puntuación de los hospedajes', y= "Porcentaje", x= "Puntuación") +
+  scale_y_continuous(labels = percent_format()) +
+  theme_bw()
+g2 <- ggplot(data = listing, aes(x = "", y = Review.Scores.Rating)) + 
+  geom_boxplot() + 
+  stat_summary(fun.y=mean, geom="point", shape=18, size=3, color="orange") + 
+  coord_flip() + theme_void() 
+plot_grid(g1, g2, ncol = 1, rel_heights = c(9, 1), align = 'v' ) # De cowplot
+```
+
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+g1 <- ggplot(listing, aes(x = Price)) + 
+  geom_histogram( aes(y = stat(count) / sum(count))) +
+  labs(title= 'Histograma del precio de los hospedajes', y= "Porcentaje", x= "$USD") +
+  scale_y_continuous(labels = percent_format()) +
+  theme_bw()
+g2 <- ggplot(data = listing, aes(x = "", y = Price)) + 
+  geom_boxplot() + 
+  stat_summary(fun.y=mean, geom="point", shape=18, size=3, color="orange") + 
+  coord_flip() + theme_void() 
+plot_grid(g1, g2, ncol = 1, rel_heights = c(9, 1), align = 'v' ) # De cowplot
+```
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(listing, aes(x= Review.Scores.Rating, y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión', y= "Tiempo",subtitle = "¿Existe una relación postiva entre el precio y la calificación del usuario?")
+
+```
+
+### 2. Relación entre el tipo de habitación y el precio
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+gg=listing %>% 
+  group_by(Room.Type) %>%
+  summarise( Frec= n()) %>%
+  mutate(Prop= Frec/ sum(Frec) )  %>% 
+  ggplot(aes(x= Room.Type,y=Prop))+labs(title = "Distribución del los tipos de habitación",fill=
+                                            "Tipos_Hab")+xlab("Tipos de habitación")+
+  geom_bar(stat= "identity",aes(fill= Room.Type))+
+  geom_text(aes( label =round(Prop,3)*100) , vjust = -.5) +
+  scale_y_continuous(labels = percent_format())
+ggplotly(gg)
+
+ggplot(listing, aes(x= Room.Type, y = Price)) + 
+  geom_boxplot(fill = "steelblue", outlier.alpha = 0.05) + 
+  stat_summary(fun.y=mean, geom="point", shape=3, size=2, color= "red") +
+  coord_flip() +
+  labs(title= 'Booxplot para el precio por tipo de habitación', y= "$USD",subtitle = "¿Existe diferencias de precio entre los diferentes tipos de habitaciones?")
+
+```
+
+### 3. Relación entre los tiempos de respuesta del host y el precio.
+
+Se tiene cierta sospecha que un indicador de que una habitación es costosa es el esfuerzo que tiene su host en brindar un buen servicio, esto se puede ver reflejado en el tiempo de respuesta a la solicitud de hospedaje.
+
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+
+ggplot(listing, aes(x= Host.Response.Time, y = Price)) + 
+  geom_boxplot(fill = "steelblue", outlier.alpha = 0.05) + 
+  stat_summary(fun.y=mean, geom="point", shape=3, size=2, color= "red") +
+  coord_flip() +
+  labs(title= 'Booxplot para el Dinero por tiempo de respuesta', y= "Dinero",subtitle = "¿Existe relación positiva entre el tiempo de espero y el precio?")
+
+ggplot(listing, aes(x= Host.Response.Rate, y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión', y= "Dinero",subtitle = "¿Existe una relación positiva entre la calificación de tiempo de respuesta y el precio?")
+
+```
+
+
+### 4. Relación entre el número de Reviews y el precio.
+
+El número de Reviews se puede interpretar como la popularidad de cada alojamiento, entonces, se tiene la hipótesis de si el sitio es más popular tiene un mayor precio.
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(listing, aes(x= Reviews.per.Month, y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión', y= "Dinero",x="Promedio de reviews por mes",subtitle = "¿Existe una relación positiva entre el número de Reviews por mes y el precio?")
+
+
+
+ggplot(listing, aes(x= Number.of.Reviews, y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión', y= "Dinero",x="Promedio de reviews por mes",subtitle = "¿Existe una relación positiva entre el número de Reviews por mes y el precio?")
+```
+
+### 5. Relación entre el número de baños, camas y habitaciones  y el precio.
+
+En este literal exploramos la relación entre las diferentes áreas que tiene el alojamiento.
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(listing, aes(x= Bathrooms , y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión de Baños vs Precios', y= "Dinero")
+
+ggplot(listing, aes(x= Bedrooms , y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión de Habitaciones vs Precios', y= "Dinero")
+
+ggplot(listing, aes(x= Beds , y = Price)) + 
+  geom_point( alpha=0.05)  +
+  geom_smooth() +
+  labs(title= 'Gráfico de dispersión de Camas vs Precios', y= "Dinero")
+```
+
+
+### Conclusiones
+
+Se observan diferentes comportamientos entre la relación de los precios con diferentes características del alojamiento, como resultados tenemos que el número de habitaciones, baños y camas parece tener una relación positiva con el precio, lo cual puede ser intuitivo pues con más camas el alojamiento puede albergar a más personas y también resulta ser más espacioso. 
+
+Se analiza el precio por el tipo de habitación y en este caso, los alojamientos que son casas independientes tienen mayores precios en promedio que los cuartos privados o los cuartos compartidos, de igual forma no existe muchos alojamientos que sean compartidos.
+
+Como tercer punto vemos que tanto el número de Review o la velocidad de respuesta por parte del host no tiene mayor importancia en los precios, es decir que hay alojamientos de precios altos, medios y bajos que son populares, y de igual manera, la velocidad de respuesta es en promedio similar para los diferentes niveles de alojamiento.
+
+Para terminar, se tenía la intuicín de la hipótesis que los alojamientos con mejores puntajes van a tener precios más elevados, sin embargo, y algo igual que con el número de reviews, no existe gran diferencia entre estas dos variables.
+
+Como extensión para este análisis se podría sugerir un análisis de regresión lineal simple explorando más variables y también teniendo el conocimiento que hay ciertas variables que no parecen guardar una fuerte relación con el precio.
